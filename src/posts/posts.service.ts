@@ -51,6 +51,32 @@ export class PostsService {
     });
   }
 
+  findMyBookmarks(userId: string) {
+    return this.prisma.bookmark.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        post: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                username: true,
+                photoKey: true,
+              },
+            },
+            _count: {
+              select: {
+                likes: true,
+                bookmarks: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
   async findOne(id: string) {
     const post = await this.prisma.post.findUnique({
       where: { id },

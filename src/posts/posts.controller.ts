@@ -53,6 +53,16 @@ export class PostsController {
     return this.postsService.findAll();
   }
 
+  @ApiOperation({ summary: 'List my bookmarked posts' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiOkResponse({ description: 'Bookmarks retrieved successfully' })
+  @UseGuards(JwtAuthGuard)
+  @Get('bookmarks/me')
+  findMyBookmarks(@Req() req: AuthRequest) {
+    return this.postsService.findMyBookmarks(req.user.userId);
+  }
+
   @ApiOperation({ summary: 'Get a post by id' })
   @ApiOkResponse({ description: 'Post retrieved successfully' })
   @ApiNotFoundResponse({ description: 'Post not found' })
