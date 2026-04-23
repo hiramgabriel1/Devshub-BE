@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post as HttpPost,
@@ -61,6 +62,34 @@ export class PostsController {
   @Get('bookmarks/me')
   findMyBookmarks(@Req() req: AuthRequest) {
     return this.postsService.findMyBookmarks(req.user.userId);
+  }
+
+  @ApiOperation({ summary: 'Save a post to my bookmarks' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Post not found' })
+  @ApiCreatedResponse({
+    description: 'Post bookmarked successfully',
+    schema: { example: { bookmarked: true } },
+  })
+  @UseGuards(JwtAuthGuard)
+  @HttpPost(':postId/bookmark')
+  bookmarkPost(@Req() req: AuthRequest, @Param('postId') postId: string) {
+    return this.postsService.bookmarkPost(req.user.userId, postId);
+  }
+
+  @ApiOperation({ summary: 'Remove a post from my bookmarks' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Post not found' })
+  @ApiOkResponse({
+    description: 'Bookmark removed successfully',
+    schema: { example: { bookmarked: false } },
+  })
+  @UseGuards(JwtAuthGuard)
+  @Delete(':postId/bookmark')
+  removeBookmark(@Req() req: AuthRequest, @Param('postId') postId: string) {
+    return this.postsService.removeBookmark(req.user.userId, postId);
   }
 
   @ApiOperation({ summary: 'Get a post by id' })

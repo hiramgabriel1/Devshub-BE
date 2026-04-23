@@ -77,6 +77,47 @@ export class PostsService {
     });
   }
 
+  async bookmarkPost(userId: string, postId: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    await this.prisma.bookmark.upsert({
+      where: {
+        userId_postId: {
+          userId,
+          postId,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        postId,
+      },
+    });
+
+    return { bookmarked: true };
+  }
+
+  async removeBookmark(userId: string, postId: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    await this.prisma.bookmark.deleteMany({
+      where: {
+        userId,
+        postId,
+      },
+    });
+
+    return { bookmarked: false };
+  }
+
   async findOne(id: string) {
     const post = await this.prisma.post.findUnique({
       where: { id },
