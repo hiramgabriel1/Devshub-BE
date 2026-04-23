@@ -178,6 +178,23 @@ Base backend en **NestJS**.
 **Ejemplo**
 - `GET /users/trending-builders?by=combined&limit=10`
 
+---
+
+### `GET /users/my-profile` (Bearer token requerido)
+
+**Que hace**
+- Devuelve el perfil del usuario autenticado.
+- Incluye conteos de followers/following/posts.
+- Incluye bookmarks (ultimos 25) con sus posts.
+
+---
+
+### `GET /users/:username`
+
+**Que hace**
+- Devuelve el perfil publico de un usuario por `username`.
+- Incluye conteos de followers/following/posts.
+
 ## Health / Base
 
 ### `GET /`

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TrendingBuildersBy, TrendingBuildersQueryDto } from './dto/trending-builders-query.dto';
 
@@ -16,6 +16,92 @@ type TrendingBuilder = {
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getMyProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        photoKey: true,
+        position: true,
+        description: true,
+        techStack: true,
+        socialLinks: true,
+        websiteUrl: true,
+        isVerified: true,
+        createdAt: true,
+        _count: {
+          select: {
+            followers: true,
+            following: true,
+            posts: true,
+          },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    return user;
+  }
+
+  async getMyProfileWithBookmarks(userId: string) {
+    const profile = await this.getMyProfile(userId);
+
+    const bookmarks = await this.prisma.bookmark.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+      select: {
+        createdAt: true,
+        post: {
+          include: {
+            author: {
+              select: { id: true, username: true, photoKey: true },
+            },
+            _count: {
+              select: { likes: true, bookmarks: true },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      ...profile,
+      bookmarks,
+    };
+  }
+
+  async getProfileByUsername(username: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+      select: {
+        id: true,
+        username: true,
+        photoKey: true,
+        position: true,
+        description: true,
+        techStack: true,
+        socialLinks: true,
+        websiteUrl: true,
+        createdAt: true,
+        _count: {
+          select: {
+            followers: true,
+            following: true,
+            posts: true,
+          },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    return user;
+  }
 
   async getTrendingBuilders(query: TrendingBuildersQueryDto) {
     const by = query.by ?? TrendingBuildersBy.COMBINED;

@@ -1,12 +1,47 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Request } from 'express';
+import {
+  ApiBearerAuth,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TrendingBuildersBy, TrendingBuildersQueryDto } from './dto/trending-builders-query.dto';
 import { UsersService } from './users.service';
+
+type AuthRequest = Request & {
+  user: {
+    userId: string;
+    email: string;
+    username: string;
+  };
+};
 
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @ApiOperation({ summary: 'Get my profile (private)' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiOkResponse({ description: 'Profile retrieved successfully' })
+  @UseGuards(JwtAuthGuard)
+  @Get('my-profile')
+  getMyProfile(@Req() req: AuthRequest) {
+    return this.usersService.getMyProfileWithBookmarks(req.user.userId);
+  }
+
+  // Backwards-compatible alias (can be removed later)
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMe(@Req() req: AuthRequest) {
+    return this.usersService.getMyProfileWithBookmarks(req.user.userId);
+  }
 
   @ApiOperation({ summary: 'Get trending builders by followers and/or post likes' })
   @ApiQuery({
@@ -46,6 +81,14 @@ export class UsersController {
   @Get('trending-builders')
   getTrendingBuilders(@Query() query: TrendingBuildersQueryDto) {
     return this.usersService.getTrendingBuilders(query);
+  }
+
+  @ApiOperation({ summary: 'Get a public profile by username' })
+  @ApiOkResponse({ description: 'Profile retrieved successfully' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @Get(':username')
+  getByUsername(@Param('username') username: string) {
+    return this.usersService.getProfileByUsername(username);
   }
 }
 
