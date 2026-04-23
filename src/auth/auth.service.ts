@@ -1,16 +1,25 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -44,7 +53,16 @@ export class AuthService {
       },
     });
 
-    return this.buildAuthResponse(user);
+    const token = await this.generateVerificationToken(user.id);
+    await this.mailService.sendVerificationEmail({
+      email: user.email,
+      username: user.username,
+      token,
+    });
+
+    return {
+      message: 'Account created. Please verify your email before logging in.',
+    };
   }
 
   async login(dto: LoginDto) {
@@ -61,7 +79,61 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.isVerified) {
+      throw new UnauthorizedException('Account not verified. Please verify your email first.');
+    }
+
     return this.buildAuthResponse(user);
+  }
+
+  async verifyEmail(dto: VerifyEmailDto) {
+    const verification = await this.prisma.emailVerificationToken.findUnique({
+      where: { token: dto.token },
+      include: { user: true },
+    });
+
+    if (!verification) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
+    if (verification.expiresAt.getTime() < Date.now()) {
+      await this.prisma.emailVerificationToken.delete({
+        where: { id: verification.id },
+      });
+      throw new BadRequestException('Verification token expired');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: verification.userId },
+        data: { isVerified: true },
+      }),
+      this.prisma.emailVerificationToken.delete({
+        where: { id: verification.id },
+      }),
+    ]);
+
+    return this.buildAuthResponse(verification.user);
+  }
+
+  private async generateVerificationToken(userId: string) {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
+
+    await this.prisma.emailVerificationToken.upsert({
+      where: { userId },
+      create: {
+        userId,
+        token,
+        expiresAt,
+      },
+      update: {
+        token,
+        expiresAt,
+      },
+    });
+
+    return token;
   }
 
   private buildAuthResponse(user: User) {

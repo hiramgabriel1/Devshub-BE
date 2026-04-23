@@ -1,5 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBody,
   ApiConflictResponse,
   ApiOkResponse,
@@ -10,6 +11,7 @@ import {
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -20,11 +22,10 @@ export class AuthController {
   @ApiBody({ type: RegisterDto })
   @ApiConflictResponse({ description: 'Email or username already in use' })
   @ApiOkResponse({
-    description: 'User registered successfully',
+    description: 'User registered successfully, verification email sent',
     schema: {
       example: {
-        accessToken: 'jwt-token',
-        user: { id: 'clx...', email: 'user@nuvix.dev', username: 'hiramdev' },
+        message: 'Account created. Please verify your email before logging in.',
       },
     },
   })
@@ -48,6 +49,23 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @ApiOperation({ summary: 'Verify account email with token' })
+  @ApiBody({ type: VerifyEmailDto })
+  @ApiOkResponse({
+    description: 'Email verified successfully',
+    schema: {
+      example: {
+        accessToken: 'jwt-token',
+        user: { id: 'clx...', email: 'user@nuvix.dev', username: 'hiramdev' },
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid or expired token' })
+  @Post('verify-email')
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
   }
 }
 
