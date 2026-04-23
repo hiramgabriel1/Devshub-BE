@@ -1,5 +1,10 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
@@ -19,15 +24,15 @@ export class S3Service {
     const b = S3Service.resolveBucketName();
     if (!b) {
       throw new ServiceUnavailableException(
-        'S3 no esta configurado: define AWS_S3_BUCKET o S3_BUCKET (y en general AWS_REGION, credenciales).',
+        'S3 no esta configurado: define S3_BUCKET (o AWS_S3_BUCKET) y, en general, AWS_REGION y credenciales.',
       );
     }
     return b;
   }
 
-  /** `AWS_S3_BUCKET` o alias `S3_BUCKET` (mismo que puedes usar en el .env con Doppler). */
+  /** Nombre del bucket: `S3_BUCKET` o, en su defecto, `AWS_S3_BUCKET`. */
   static resolveBucketName(): string | undefined {
-    const v = process.env.AWS_S3_BUCKET?.trim() || process.env.S3_BUCKET?.trim();
+    const v = process.env.S3_BUCKET?.trim() || process.env.AWS_S3_BUCKET?.trim();
     return v || undefined;
   }
 
@@ -61,6 +66,85 @@ export class S3Service {
   }
 
   /**
+   * Base pública **opcional** (sin / final) si quieres otra raíz (dominio, proxy, etc.).
+   * Si no está, la URL pública se arma con el patrón estándar S3, sin CloudFront.
+   */
+  static resolveUserPhotoPublicBase(): string | undefined {
+    const u =
+      process.env.S3_USER_PHOTO_BASE_URL?.trim() || process.env.S3_USER_MEDIA_PUBLIC_BASE?.trim();
+    if (!u) {
+      return undefined;
+    }
+    return u;
+  }
+
+  static resolveAwsRegion(): string {
+    const r = (process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'us-east-1').trim();
+    return r || 'us-east-1';
+  }
+
+  /**
+   * URL pública a guardar en `User.photoKey` al subir a `s3ObjectKey`.
+   * Sin `S3_USER_PHOTO_BASE_URL`: `https://<bucket>.s3.<region>.amazonaws.com/<key>` (virtual-hosted).
+   * Necesitas lectura pública (p. ej. `GetObject` en el prefijo) u `ObjectOwnership` adecuado; no hace falta CloudFront.
+   */
+  static publicUrlForObjectKey(s3ObjectKey: string): string {
+    const custom = S3Service.resolveUserPhotoPublicBase();
+    if (custom) {
+      return `${custom.replace(/\/$/, '')}/${s3ObjectKey.replace(/^\//, '')}`;
+    }
+    const bucket = S3Service.resolveBucketName();
+    if (!bucket) {
+      throw new ServiceUnavailableException(
+        'Define S3_BUCKET (o AWS_S3_BUCKET) y AWS_REGION para armar la URL pública S3 de la foto.',
+      );
+    }
+    const region = S3Service.resolveAwsRegion();
+    const rel = s3ObjectKey.replace(/^\//, '');
+    const path = rel
+      .split('/')
+      .map((p) => encodeURIComponent(p))
+      .join('/');
+    return `https://${bucket}.s3.${region}.amazonaws.com/${path}`;
+  }
+
+  /**
+   * Para DeleteObject: valor guardado (URL pública o clave) → clave S3.
+   * Si no se puede interpretar, devuelve null (no se borra en S3).
+   */
+  static objectKeyFromStoredUserPhoto(value: string | null | undefined): string | null {
+    if (value == null) {
+      return null;
+    }
+    const t = value.trim();
+    if (!t) {
+      return null;
+    }
+    if (!/^https?:\/\//i.test(t)) {
+      return t;
+    }
+    const publicBase = S3Service.resolveUserPhotoPublicBase();
+    if (publicBase) {
+      const b = publicBase.replace(/\/$/, '');
+      if (t === b) {
+        return null;
+      }
+      if (t.startsWith(b + '/')) {
+        return t.slice((b + '/').length) || null;
+      }
+    }
+    try {
+      const path = new URL(t).pathname.replace(/^\//, '');
+      if (path) {
+        return path.split('/').map((s) => decodeURIComponent(s)).join('/');
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  /**
    * Subida directa (buffer) al bucket; útil p.ej. reportes o jobs server-side.
    */
   async putObject(params: { key: string; body: Buffer; contentType: string }): Promise<{ key: string }> {
@@ -83,6 +167,26 @@ export class S3Service {
       );
     }
     return { key: params.key };
+  }
+
+  /**
+   * Borrado idempotente; si S3 no está configurado, no hace nada. Errores de red/permisos se ignoran (mejor el perfil quede coherente que fallar el PATCH).
+   */
+  async deleteObjectBestEffort(params: { key: string }): Promise<void> {
+    if (!S3Service.resolveBucketName()) {
+      return;
+    }
+    const bucket = this.bucket;
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: params.key,
+        }),
+      );
+    } catch {
+      // best-effort
+    }
   }
 }
 

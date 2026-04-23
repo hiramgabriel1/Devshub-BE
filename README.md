@@ -34,6 +34,7 @@ Endpoints protegidos:
 - `POST /posts/:postId/bookmark`
 - `DELETE /posts/:postId/bookmark`
 - `GET /users/my-profile`
+- `PATCH /users/my-profile` (JSON o `multipart/form-data` con `photo`; se sube a S3 bajo **`S3_USERS_FOLDER`**; por defecto el prefijo es **`profile-media/`**; en `photoKey` se guarda la **URL pública**). Por defecto: `https://<bucket>.s3.<region>.amazonaws.com/profile-media/...` (bucket desde **`S3_BUCKET`**, región con **`AWS_REGION`**). Opcional: **`S3_USER_PHOTO_BASE_URL`**. Ajusta en el bucket la política de acceso a ese prefijo. El backend usa `s3:PutObject` y `s3:DeleteObject` al reemplazar)
 - `GET /users/me` (alias)
 - `POST /auth/logout`
 - `POST /reports`
@@ -45,7 +46,7 @@ Endpoints protegidos:
 **Que hace**
 - Guarda un reporte asociado al usuario autenticado (quien reporta se guarda en `reporterId` en base de datos).
 - Puedes enviar el cuerpo como **`application/json`** o como **`multipart/form-data`**.
-- **Imagen subida a S3**: si envias un archivo en el part **`image`** (multipart, campo de archivo, no un string), el backend lo sube al bucket bajo el prefijo **`S3_REPORTS_PREFIX`** (nombre de carpeta en el bucket, ej. `reports/` o `moderation/reports/`; sin barra final se añade una) y guarda en la columna `image` la **clave completa** del objeto, p. ej. `<S3_REPORTS_PREFIX><reporterId>/<timestamp>-<hex>.png`. Si `S3_REPORTS_PREFIX` no está definido, se usa `reports/`. Necesitas **bucket y credenciales**: variable **`AWS_S3_BUCKET`** o, si ya usas otro nombre, **`S3_BUCKET`** (el código acepta cualquiera de las dos), además de `AWS_REGION` y, en local, `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` con permisos `s3:PutObject` al bucket. Si S3 no está configurado o la subida falla, la API responde con **503** y un mensaje explicando el motivo (en lugar de un 500 genérico).
+- **Imagen subida a S3**: si envias un archivo en el part **`image`** (multipart, campo de archivo, no un string), el backend lo sube al bucket bajo el prefijo **`S3_REPORTS_PREFIX`** (nombre de carpeta en el bucket, ej. `reports/` o `moderation/reports/`; sin barra final se añade una) y guarda en la columna `image` la **clave completa** del objeto, p. ej. `<S3_REPORTS_PREFIX><reporterId>/<timestamp>-<hex>.png`. Si `S3_REPORTS_PREFIX` no está definido, se usa `reports/`. Necesitas **bucket y credenciales**: variable **`S3_BUCKET`** (o en su defecto `AWS_S3_BUCKET`), además de `AWS_REGION` y, en local, `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` con permisos `s3:PutObject` al bucket. Si S3 no está configurado o la subida falla, la API responde con **503** y un mensaje explicando el motivo (en lugar de un 500 genérico).
 - **Sin archivo**: en JSON puedes enviar `image` como string (clave S3 existente, ruta, o según vuestro contrato) y no se llama a S3 para subir nada.
 - **Archivo y string `image` a la vez**: se prioriza el archivo; el valor string de `image` se ignora.
 

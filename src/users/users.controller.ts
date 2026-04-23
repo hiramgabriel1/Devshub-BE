@@ -1,7 +1,22 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { type Express, Request } from 'express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -10,8 +25,11 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { TrendingBuildersBy, TrendingBuildersQueryDto } from './dto/trending-builders-query.dto';
 import { UsersService } from './users.service';
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 type AuthRequest = Request & {
   user: {
@@ -34,6 +52,39 @@ export class UsersController {
   @Get('my-profile')
   getMyProfile(@Req() req: AuthRequest) {
     return this.usersService.getMyProfileWithBookmarks(req.user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Update my profile',
+    description:
+      'Acepta **application/json** o **multipart/form-data** (campo de archivo **`photo`**). Sube a S3 bajo **`S3_USERS_FOLDER`** (por defecto `profile-media/`; usa el prefijo sin restricciones de lectura). En `photoKey` se guarda la URL pública. Opcional **`S3_USER_PHOTO_BASE_URL`** para otra base.',
+  })
+  @ApiConsumes('application/json', 'multipart/form-data')
+  @ApiBody({ type: UpdateProfileDto })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiOkResponse({ description: 'Profile updated; mismo formato que GET /users/my-profile' })
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      limits: { fileSize: MAX_PHOTO_BYTES },
+      fileFilter: (_req, file, cb) => {
+        const ok = /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype);
+        if (!ok) {
+          cb(new BadRequestException('Solo se permiten imágenes JPEG, PNG, GIF o WebP'), false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  @Patch('my-profile')
+  updateMyProfile(
+    @Req() req: AuthRequest,
+    @Body() dto: UpdateProfileDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.usersService.updateMyProfile(req.user.userId, dto, file);
   }
 
   // Backwards-compatible alias (can be removed later)
@@ -65,9 +116,10 @@ export class UsersController {
         totalCandidates: 24,
         items: [
           {
-            id: 'clx...',
+            id: 'clh2a3b4c5d6e7f8g9h0i1j2',
             username: 'hiramdev',
-            photoKey: 'users/clx/profile.png',
+            photoKey:
+              'https://nuvix-media.s3.us-east-1.amazonaws.com/profile-media/clh2a3b4c5d6e7f8g9h0i1j2/1720000000000-a1b2c3d4e5f6g7h8.png',
             position: 'Backend Engineer',
             description: 'Building APIs',
             followersCount: 120,
