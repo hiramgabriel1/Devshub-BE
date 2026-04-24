@@ -23,7 +23,7 @@ Base backend en **NestJS**.
 Mismo **host y puerto** que el HTTP (no hay puerto extra). Tras levantar el servidor, el front puede conectar con **`socket.io-client`**.
 
 - **Evento** del servidor: `post:created`
-- **Payload:** el mismo cuerpo que un post en `GET /posts` (autor, `likesCount`, `bookmarksCount`, `commentsCount`, etc.), **solo** cuando el post **no** es borrador.
+- **Payload:** un post con la **misma forma** que cada elemento de `GET /posts` → `data[]` (mismo `id` que `POST /posts` para deduplicar con el que acabas de crear), **solo** si el post **no** es borrador.
 - CORS: mismos orígenes que el API (`CORS_ORIGIN` separada por comas, o `http://localhost:3000`).
 
 Ejemplo mínimo (React, etc.):
@@ -247,16 +247,39 @@ curl -X POST http://localhost:4000/reports \
 ### `GET /posts`
 
 **Que hace**
-- Lista posts publicados (`isDraft = false`) ordenados por fecha (más reciente primero).
-- **Query `filter`** (opcional, default `all`):
-  - **`filter=all`** (o sin parámetro): **todos** los posts de la plataforma. **No** requiere autenticación.
-  - **`filter=following`**: solo posts de **quienes tu usuario sigue** (misma idea que un feed de “gente a la que sigo publica”). Requiere **`Authorization: Bearer`**. Si aún no sigues a nadie, la lista viene vacía.
-- Cada post trae `likesCount`, `bookmarksCount`, `commentsCount` y el autor.
+- Devuelve posts publicados en **`{ "data": [...], "limit", "offset", "filter" }`**. Cada ítem en `data` incluye `id`, `author` (resumen), `title`, `description`, `media`, `tags`, `likesCount`, `bookmarksCount`, `commentsCount`, `createdAt`, `updatedAt`, etc. (misma forma que un elemento alimentado por el socket `post:created`).
+- **Orden:** más reciente primero (`createdAt` desc, desempate `id` desc). Paginación **offset** con `limit` y `offset`. Si `data.length < limit`, no hay más resultados; el front puede dejar de pedir.
+- **Paginación — comportamiento bajo carga:** con offset clásico, si entran posts nuevos mientras paginas, puedes ver **repetidos** o **saltos** entre ventanas. Mitigación típica: **deduplicar por `id`** (p. ej. al fusionar con `post:created`). Para listas muy dinámicas, un **cursor** sería otra vía (no implementado aquí).
+- **Query `filter`:** default `all`.
+  - **`filter=all`:** todo el feed. No requiere autenticación.
+  - **`filter=following`:** solo autores a los que sigues. Requiere **`Authorization: Bearer`**; sin token o token inválido → **401**. Si no sigues a nadie, `data: []`.
+- **Query `limit`:** entero, default **20**, máximo **100**.
+- **Query `offset`:** entero, default **0** (0, 20, 40… con `limit=20`).
 
 **Ejemplos**
-- `GET /posts`
-- `GET /posts?filter=all`
-- `GET /posts?filter=following` (con Bearer)
+- `GET /posts?filter=all&limit=20&offset=0`
+- `GET /posts?filter=following&limit=20&offset=0` (con Bearer)
+
+**Respuesta ejemplo**
+```json
+{
+  "data": [
+    {
+      "id": "clh...",
+      "title": "…",
+      "author": { "id": "clu…", "username": "dev", "photoKey": "https://…" },
+      "likesCount": 0,
+      "bookmarksCount": 0,
+      "commentsCount": 0,
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z"
+    }
+  ],
+  "limit": 20,
+  "offset": 0,
+  "filter": "all"
+}
+```
 
 ---
 

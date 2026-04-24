@@ -12,9 +12,6 @@ import { AppService } from './app.service';
 
 @Module({
   imports: [
-    // Un solo throttler: si defines varios nombres, TODOS se evalúan en cada petición y
-    // el cuello de botella era `auth: 10` (toda la API, no solo /auth). Login/register
-    // siguen a 10/min con @Throttle en auth.controller.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     StorageModule,

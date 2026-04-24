@@ -132,8 +132,16 @@ export class PostsService {
     },
   };
 
+  /** Orden estable: recientes primero; `id` desempata para que offset no “bailen” filas con el mismo `createdAt`. */
+  private readonly feedOrderBy = [
+    { createdAt: 'desc' as const },
+    { id: 'desc' as const },
+  ];
+
   async findAll(query: PostsListQueryDto, currentUserId?: string) {
     const filter = query.filter ?? PostsListFilter.ALL;
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
 
     if (filter === PostsListFilter.FOLLOWING) {
       if (!currentUserId) {
@@ -147,24 +155,36 @@ export class PostsService {
       });
       const authorIds = following.map((f) => f.followingId);
       if (authorIds.length === 0) {
-        return [];
+        return { data: [], limit, offset, filter };
       }
-      return this.prisma.post
-        .findMany({
-          where: { isDraft: false, authorId: { in: authorIds } },
-          orderBy: { createdAt: 'desc' },
-          include: this.postListInclude,
-        })
-        .then((rows) => rows.map(postWithPublicCounts));
+      const rows = await this.prisma.post.findMany({
+        where: { isDraft: false, authorId: { in: authorIds } },
+        orderBy: this.feedOrderBy,
+        skip: offset,
+        take: limit,
+        include: this.postListInclude,
+      });
+      return {
+        data: rows.map(postWithPublicCounts),
+        limit,
+        offset,
+        filter,
+      };
     }
 
-    return this.prisma.post
-      .findMany({
-        where: { isDraft: false },
-        orderBy: { createdAt: 'desc' },
-        include: this.postListInclude,
-      })
-      .then((rows) => rows.map(postWithPublicCounts));
+    const rows = await this.prisma.post.findMany({
+      where: { isDraft: false },
+      orderBy: this.feedOrderBy,
+      skip: offset,
+      take: limit,
+      include: this.postListInclude,
+    });
+    return {
+      data: rows.map(postWithPublicCounts),
+      limit,
+      offset,
+      filter,
+    };
   }
 
   findMyBookmarks(userId: string) {

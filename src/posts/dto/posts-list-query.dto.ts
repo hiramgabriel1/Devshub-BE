@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsEnum } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export enum PostsListFilter {
   ALL = 'all',
@@ -22,4 +22,28 @@ export class PostsListQueryDto {
   })
   @IsEnum(PostsListFilter)
   filter!: PostsListFilter;
+
+  @ApiPropertyOptional({
+    default: 20,
+    minimum: 1,
+    maximum: 100,
+    description: 'Tamaño de página. Si hay menos ítems que `limit`, no hay más páginas.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+
+  @ApiPropertyOptional({
+    default: 0,
+    minimum: 0,
+    description: 'Desplazamiento para paginación offset (0, 20, 40…).',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number = 0;
 }

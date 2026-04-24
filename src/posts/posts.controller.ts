@@ -24,6 +24,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -90,12 +91,19 @@ export class PostsController {
   }
 
   @ApiOperation({
-    summary: 'List published posts',
+    summary: 'List published posts (paginado)',
     description:
-      '**`filter=all`** (por defecto): todo el feed público, sin login. **`filter=following`**: posts solo de quienes el usuario autenticado **sigue**; requiere `Authorization: Bearer`.',
+      '**`filter=all`** (por defecto): feed público. **`filter=following`**: solo quienes sigues; requiere `Authorization: Bearer` (sin token → 401).\n\n' +
+      '**Paginación:** `limit` (default 20, max 100), `offset` (0, 20, 40…). Respuesta: `{ data, limit, offset, filter }`. Si `data.length < limit`, no hay más páginas.\n\n' +
+      '**Orden:** `createdAt` desc, desempate `id` desc (offset estable frente a empates; con posts nuevos concurrentes puede haber duplicados o saltos entre páginas — el front puede deduplicar por `id`, p. ej. con eventos `post:created`).',
   })
+  @ApiQuery({ name: 'filter', required: false, enum: ['all', 'following'] })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
   @ApiBearerAuth()
-  @ApiOkResponse({ description: 'Posts retrieved successfully' })
+  @ApiOkResponse({
+    description: 'Lista paginada en `data`; cada post incluye author, likesCount, bookmarksCount, commentsCount',
+  })
   @ApiUnauthorizedResponse({
     description: 'Solo si usas filter=following sin token o con token inválido',
   })
