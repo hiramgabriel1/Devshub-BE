@@ -5,13 +5,24 @@ import { Resend } from 'resend';
 export class MailService {
   private readonly resend = new Resend(process.env.RESEND_API_KEY);
 
+  private getPublicAppBaseUrl(): string {
+    const explicit = process.env.APP_URL?.trim();
+    if (explicit) {
+      return explicit.replace(/\/$/, '');
+    }
+    const isDeployedProd =
+      process.env.NODE_ENV === 'production' ||
+      process.env.RAILWAY_ENVIRONMENT === 'production';
+    return isDeployedProd ? 'https://www.devshub.dev' : 'http://localhost:3000';
+  }
+
   async sendVerificationEmail(params: { email: string; username: string; token: string }) {
     const from = process.env.RESEND_FROM_EMAIL;
     if (!from) {
       throw new InternalServerErrorException('RESEND_FROM_EMAIL is not configured');
     }
 
-    const appUrl = process.env.APP_URL ?? 'http://localhost:5001';
+    const appUrl = this.getPublicAppBaseUrl();
     const verifyUrl = `${appUrl}/auth/verify-email?token=${params.token}`;
 
     const result = await this.resend.emails.send({
