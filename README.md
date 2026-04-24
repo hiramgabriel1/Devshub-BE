@@ -30,6 +30,7 @@ El token se obtiene de `POST /auth/login` (o `POST /auth/verify-email` tras regi
 
 Endpoints protegidos:
 - `POST /posts`
+- `DELETE /posts/:postId` (solo el autor del post)
 - `POST /posts/:postId/like` (me gusta)
 - `DELETE /posts/:postId/like` (quitar me gusta)
 - `GET /posts/bookmarks/me`
@@ -230,6 +231,20 @@ curl -X POST http://localhost:4000/reports \
 - Devuelve detalle de un post por ID.
 - Incluye autor, `likesCount` y `bookmarksCount` (totales de **ese** post).
 - Para listar **quiénes** dieron like, usa `GET /posts/:postId/likes`.
+
+---
+
+### `DELETE /posts/:postId` (Bearer token requerido)
+
+**Que hace**
+- Elimina el post. **Solo** el usuario creador (`authorId` coincidente con el token) puede borrarlo.
+- Si el post no existe → `404`. Si existes pero no eres el autor → `403 Forbidden`.
+- Los likes y bookmarks de ese post se eliminan en cascada (Prisma).
+
+**Respuesta ejemplo**
+```json
+{ "deleted": true, "id": "clh..." }
+```
 
 ---
 

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import type { Express } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
@@ -298,5 +303,20 @@ export class PostsService {
     if (!post) throw new NotFoundException('Post not found');
 
     return postWithPublicCounts(post);
+  }
+
+  async deletePost(authorId: string, postId: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true },
+    });
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+    if (post.authorId !== authorId) {
+      throw new ForbiddenException('Solo el autor del post puede eliminarlo');
+    }
+    await this.prisma.post.delete({ where: { id: postId } });
+    return { deleted: true, id: postId };
   }
 }

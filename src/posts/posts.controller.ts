@@ -19,6 +19,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -161,6 +162,21 @@ export class PostsController {
   @Delete(':postId/bookmark')
   removeBookmark(@Req() req: AuthRequest, @Param('postId') postId: string) {
     return this.postsService.removeBookmark(req.user.userId, postId);
+  }
+
+  @ApiOperation({ summary: 'Delete a post (author only)' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Post not found' })
+  @ApiForbiddenResponse({ description: 'Authenticated user is not the post author' })
+  @ApiOkResponse({
+    description: 'Post deleted',
+    schema: { example: { deleted: true, id: 'clh...' } },
+  })
+  @UseGuards(JwtAuthGuard)
+  @Delete(':postId')
+  deletePost(@Req() req: AuthRequest, @Param('postId') postId: string) {
+    return this.postsService.deletePost(req.user.userId, postId);
   }
 
   @ApiOperation({ summary: 'Get a post by id' })
