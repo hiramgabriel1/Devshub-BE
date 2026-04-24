@@ -1,11 +1,12 @@
-/** Orígenes permitidos: `CORS_ORIGIN` separada por comas, o `http://localhost:3000` por defecto. */
+const PRODUCTION_FRONTEND_ORIGINS = ['https://www.devshub.dev'] as const;
+
 export function getCorsOrigins(): string[] {
   const raw = process.env.CORS_ORIGIN?.trim();
-  if (!raw) {
-    return ['http://localhost:3000'];
-  }
-  return raw
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
+  const fromEnv = raw
+    ? raw
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+    : ['http://localhost:3000'];
+  return [...new Set([...PRODUCTION_FRONTEND_ORIGINS, ...fromEnv])];
 }
