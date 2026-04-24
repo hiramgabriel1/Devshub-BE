@@ -9,6 +9,7 @@ import { randomBytes } from 'crypto';
 import type { Express } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
+import { FeedGateway } from './feed.gateway';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -44,6 +45,7 @@ export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
+    private readonly feedGateway: FeedGateway,
   ) {}
 
   async create(authorId: string, dto: CreatePostDto, files?: Express.Multer.File[]) {
@@ -65,7 +67,8 @@ export class PostsService {
       }
     }
     const media = [...(dto.media ?? []), ...fromUploads];
-    return this.prisma.post
+    const isDraft = dto.isDraft ?? false;
+    const post = await this.prisma.post
       .create({
         data: {
           authorId,
@@ -74,7 +77,7 @@ export class PostsService {
           media,
           website: dto.website,
           tags: dto.tags ?? [],
-          isDraft: dto.isDraft ?? false,
+          isDraft,
         },
         include: {
           author: {
@@ -94,6 +97,10 @@ export class PostsService {
         },
       })
       .then(postWithPublicCounts);
+    if (!isDraft) {
+      this.feedGateway.emitPostCreated(post);
+    }
+    return post;
   }
 
   private extensionForImage(mimetype: string, originalname: string): string {

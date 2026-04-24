@@ -3,11 +3,12 @@ import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
+import { FeedGateway } from './feed.gateway';
 
 @Module({
   imports: [PrismaModule, AuthModule],
   controllers: [PostsController],
-  providers: [PostsService],
+  providers: [PostsService, FeedGateway],
 })
 export class PostsModule {}
 

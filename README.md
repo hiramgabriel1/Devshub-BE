@@ -16,7 +16,27 @@ Base backend en **NestJS**.
 ## API Docs
 
 - Swagger UI: `GET /docs`
-- Base URL local: `http://localhost:4000` (o el puerto definido en `PORT`)
+- Base URL local: el puerto por defecto del servidor (ver `PORT` en `.env` / `main.ts`).
+
+## Tiempo real (WebSocket, Socket.IO)
+
+Mismo **host y puerto** que el HTTP (no hay puerto extra). Tras levantar el servidor, el front puede conectar con **`socket.io-client`**.
+
+- **Evento** del servidor: `post:created`
+- **Payload:** el mismo cuerpo que un post en `GET /posts` (autor, `likesCount`, `bookmarksCount`, `commentsCount`, etc.), **solo** cuando el post **no** es borrador.
+- CORS: mismos orígenes que el API (`CORS_ORIGIN` separada por comas, o `http://localhost:3000`).
+
+Ejemplo mínimo (React, etc.):
+
+```ts
+import { io } from 'socket.io-client';
+
+const base = import.meta.env.VITE_API_URL ?? 'http://localhost:5001';
+const socket = io(base, { withCredentials: true, transports: ['websocket', 'polling'] });
+socket.on('post:created', (post) => {
+  // Anteponer a la lista del feed
+});
+```
 
 ## Autenticación
 
