@@ -14,9 +14,12 @@ import { FeedGateway } from '../realtime/feed.gateway';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
+import { CreateDraftPostDto } from './dto/create-draft-post.dto';
+import { DraftPostsListQueryDto } from './dto/draft-posts-list-query.dto';
 import { PostCommentsQueryDto } from './dto/post-comments-query.dto';
 import { PostLikesQueryDto } from './dto/post-likes-query.dto';
 import { PostsListFilter, PostsListQueryDto } from './dto/posts-list-query.dto';
+import { UpdateDraftPostDto } from './dto/update-draft-post.dto';
 
 const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
@@ -50,7 +53,7 @@ export class PostsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async create(authorId: string, dto: CreatePostDto, files?: Express.Multer.File[]) {
+  private async uploadPostImages(authorId: string, files?: Express.Multer.File[]): Promise<string[]> {
     const fromUploads: string[] = [];
     if (files?.length) {
       for (const file of files) {
@@ -68,6 +71,11 @@ export class PostsService {
         fromUploads.push(S3Service.publicUrlForObjectKey(s3ObjectKey));
       }
     }
+    return fromUploads;
+  }
+
+  async create(authorId: string, dto: CreatePostDto, files?: Express.Multer.File[]) {
+    const fromUploads = await this.uploadPostImages(authorId, files);
     const media = [...(dto.media ?? []), ...fromUploads];
     const isDraft = dto.isDraft ?? false;
     const post = await this.prisma.post
@@ -139,6 +147,138 @@ export class PostsService {
     { createdAt: 'desc' as const },
     { id: 'desc' as const },
   ];
+
+  private readonly draftOrderBy = [
+    { updatedAt: 'desc' as const },
+    { id: 'desc' as const },
+  ];
+
+  async listMyDrafts(authorId: string, query: DraftPostsListQueryDto) {
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.draftPost.findMany({
+        where: { authorId },
+        orderBy: this.draftOrderBy,
+        skip: offset,
+        take: limit,
+      }),
+      this.prisma.draftPost.count({ where: { authorId } }),
+    ]);
+    return { data, total, limit, offset };
+  }
+
+  async createDraft(authorId: string, dto: CreateDraftPostDto, files?: Express.Multer.File[]) {
+    const fromUploads = await this.uploadPostImages(authorId, files);
+    const media = [...(dto.media ?? []), ...fromUploads];
+    const title = dto.title?.trim() ?? '';
+    return this.prisma.draftPost.create({
+      data: {
+        authorId,
+        title,
+        description: dto.description,
+        media,
+        website: dto.website,
+        tags: dto.tags ?? [],
+      },
+    });
+  }
+
+  async getDraft(authorId: string, draftId: string) {
+    const draft = await this.prisma.draftPost.findFirst({
+      where: { id: draftId, authorId },
+    });
+    if (!draft) throw new NotFoundException('Draft not found');
+    return draft;
+  }
+
+  async updateDraft(
+    authorId: string,
+    draftId: string,
+    dto: UpdateDraftPostDto,
+    files?: Express.Multer.File[],
+  ) {
+    const draft = await this.prisma.draftPost.findFirst({
+      where: { id: draftId, authorId },
+    });
+    if (!draft) throw new NotFoundException('Draft not found');
+
+    const fromUploads = await this.uploadPostImages(authorId, files);
+    const newMedia =
+      dto.media !== undefined
+        ? [...dto.media, ...fromUploads]
+        : fromUploads.length > 0
+          ? [...draft.media, ...fromUploads]
+          : undefined;
+
+    return this.prisma.draftPost.update({
+      where: { id: draftId },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.website !== undefined ? { website: dto.website } : {}),
+        ...(dto.tags !== undefined ? { tags: dto.tags } : {}),
+        ...(newMedia !== undefined ? { media: newMedia } : {}),
+      },
+    });
+  }
+
+  async deleteDraft(authorId: string, draftId: string) {
+    const draft = await this.prisma.draftPost.findFirst({
+      where: { id: draftId, authorId },
+      select: { id: true },
+    });
+    if (!draft) throw new NotFoundException('Draft not found');
+    await this.prisma.draftPost.delete({ where: { id: draftId } });
+    return { deleted: true, id: draftId };
+  }
+
+  async publishDraft(authorId: string, draftId: string) {
+    const post = await this.prisma.$transaction(async (tx) => {
+      const draft = await tx.draftPost.findFirst({
+        where: { id: draftId, authorId },
+      });
+      if (!draft) throw new NotFoundException('Draft not found');
+      const title = draft.title.trim();
+      if (!title) {
+        throw new BadRequestException('Añade un título para publicar');
+      }
+
+      const created = await tx.post.create({
+        data: {
+          authorId,
+          title,
+          description: draft.description,
+          media: draft.media,
+          website: draft.website,
+          tags: draft.tags,
+          isDraft: false,
+        },
+        include: {
+          author: {
+            select: {
+              id: true,
+              username: true,
+              photoKey: true,
+            },
+          },
+          _count: {
+            select: {
+              likes: true,
+              bookmarks: true,
+              comments: true,
+            },
+          },
+        },
+      });
+
+      await tx.draftPost.delete({ where: { id: draftId } });
+      return postWithPublicCounts(created);
+    });
+
+    this.feedGateway.emitPostCreated(post);
+    return post;
+  }
 
   async findAll(query: PostsListQueryDto, currentUserId?: string) {
     const filter = query.filter ?? PostsListFilter.ALL;

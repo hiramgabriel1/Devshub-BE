@@ -31,8 +31,11 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CreateCommentDto } from './dto/create-comment.dto';
+import { CreateDraftPostDto } from './dto/create-draft-post.dto';
 import { CreatePostDto } from './dto/create-post.dto';
+import { DraftPostsListQueryDto } from './dto/draft-posts-list-query.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { UpdateDraftPostDto } from './dto/update-draft-post.dto';
 import { PostCommentsQueryDto } from './dto/post-comments-query.dto';
 import { PostLikesQueryDto } from './dto/post-likes-query.dto';
 import { PostsListQueryDto } from './dto/posts-list-query.dto';
@@ -124,6 +127,123 @@ export class PostsController {
   @Get('bookmarks/me')
   findMyBookmarks(@Req() req: AuthRequest) {
     return this.postsService.findMyBookmarks(req.user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Listar mis borradores de post',
+    description: 'Paginado por `limit` / `offset`. Orden: `updatedAt` desc.',
+  })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiOkResponse({ description: 'Lista de filas `DraftPost`' })
+  @UseGuards(JwtAuthGuard)
+  @Get('drafts/me')
+  listMyDrafts(@Req() req: AuthRequest, @Query() query: DraftPostsListQueryDto) {
+    return this.postsService.listMyDrafts(req.user.userId, query);
+  }
+
+  @ApiOperation({
+    summary: 'Crear borrador',
+    description:
+      'Igual que crear post: JSON o **multipart/form-data** con `files` opcionales. Todos los campos son opcionales.',
+  })
+  @ApiConsumes('application/json', 'multipart/form-data')
+  @ApiBearerAuth()
+  @ApiBody({ type: CreateDraftPostDto })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiCreatedResponse({ description: 'Borrador creado' })
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FilesInterceptor('files', MAX_POST_IMAGES, {
+      limits: { fileSize: MAX_IMAGE_BYTES },
+      fileFilter: (_req, file, cb) => {
+        const ok = /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype);
+        if (!ok) {
+          cb(
+            new BadRequestException('Solo se permiten imágenes JPEG, PNG, GIF o WebP en el post'),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  @HttpPost('drafts')
+  createDraft(
+    @Req() req: AuthRequest,
+    @Body() dto: CreateDraftPostDto,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.postsService.createDraft(req.user.userId, dto, files);
+  }
+
+  @ApiOperation({ summary: 'Obtener un borrador (solo el autor)' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Borrador no encontrado' })
+  @UseGuards(JwtAuthGuard)
+  @Get('drafts/:draftId')
+  getDraft(@Req() req: AuthRequest, @Param('draftId') draftId: string) {
+    return this.postsService.getDraft(req.user.userId, draftId);
+  }
+
+  @ApiOperation({ summary: 'Actualizar borrador (solo el autor)' })
+  @ApiConsumes('application/json', 'multipart/form-data')
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateDraftPostDto })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Borrador no encontrado' })
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FilesInterceptor('files', MAX_POST_IMAGES, {
+      limits: { fileSize: MAX_IMAGE_BYTES },
+      fileFilter: (_req, file, cb) => {
+        const ok = /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype);
+        if (!ok) {
+          cb(
+            new BadRequestException('Solo se permiten imágenes JPEG, PNG, GIF o WebP en el post'),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  @Patch('drafts/:draftId')
+  updateDraft(
+    @Req() req: AuthRequest,
+    @Param('draftId') draftId: string,
+    @Body() dto: UpdateDraftPostDto,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.postsService.updateDraft(req.user.userId, draftId, dto, files);
+  }
+
+  @ApiOperation({ summary: 'Eliminar borrador (solo el autor)' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Borrador no encontrado' })
+  @UseGuards(JwtAuthGuard)
+  @Delete('drafts/:draftId')
+  deleteDraft(@Req() req: AuthRequest, @Param('draftId') draftId: string) {
+    return this.postsService.deleteDraft(req.user.userId, draftId);
+  }
+
+  @ApiOperation({
+    summary: 'Publicar borrador',
+    description:
+      'Crea un `Post` publicado (`isDraft: false`), emite el evento de feed y elimina el borrador. Requiere `title` no vacío.',
+  })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Borrador no encontrado' })
+  @ApiOkResponse({ description: 'Post publicado (misma forma que crear post publicado)' })
+  @UseGuards(JwtAuthGuard)
+  @HttpPost('drafts/:draftId/publish')
+  publishDraft(@Req() req: AuthRequest, @Param('draftId') draftId: string) {
+    return this.postsService.publishDraft(req.user.userId, draftId);
   }
 
   @ApiOperation({ summary: 'List users who liked a post' })

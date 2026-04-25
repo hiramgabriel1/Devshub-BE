@@ -28,6 +28,7 @@ model User {
   following Follow[] @relation("UserFollowing")
   followers Follow[] @relation("UserFollowers")
   posts                Post[]
+  draftPosts           DraftPost[]
   discussions        Discussion[]
   comments             Comment[]
   discussionComments DiscussionComment[]
@@ -87,6 +88,23 @@ model Post {
 
   @@index([authorId])
   @@index([createdAt])
+}
+
+model DraftPost {
+  id          String   @id @default(cuid())
+  authorId    String
+  title       String   @default("")
+  description String?
+  media       String[] @default([])
+  website     String?
+  tags        String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([authorId, updatedAt])
 }
 
 model Like {
