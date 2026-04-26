@@ -23,34 +23,52 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const existingByEmail = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
-      select: { id: true },
-    });
-    if (existingByEmail) {
-      throw new ConflictException('Email already in use');
-    }
-
-    const existingByUsername = await this.prisma.user.findUnique({
-      where: { username: dto.username },
-      select: { id: true },
-    });
-    if (existingByUsername) {
-      throw new ConflictException('Username already in use');
-    }
-
     const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const email = dto.email.toLowerCase();
+    const username = dto.username;
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email.toLowerCase(),
-        username: dto.username,
-        password: hashedPassword,
-        position: dto.puesto,
-        description: dto.description,
-        techStack: dto.techStacks ?? [],
-        socialLinks: dto.socialLinks as Prisma.InputJsonValue | undefined,
-      },
+    const user = await this.prisma.$transaction(async (tx) => {
+      const existingByEmail = await tx.user.findUnique({
+        where: { email },
+        select: { id: true, isVerified: true },
+      });
+      if (existingByEmail?.isVerified) {
+        throw new ConflictException('Email already in use');
+      }
+
+      const existingByUsername = await tx.user.findUnique({
+        where: { username },
+        select: { id: true, isVerified: true },
+      });
+      if (existingByUsername?.isVerified) {
+        throw new ConflictException('Username already in use');
+      }
+
+      const toDeleteIds = new Set<string>();
+      if (existingByEmail?.id) toDeleteIds.add(existingByEmail.id);
+      if (existingByUsername?.id) toDeleteIds.add(existingByUsername.id);
+
+      const ids = [...toDeleteIds];
+      if (ids.length > 0) {
+        await tx.emailVerificationToken.deleteMany({
+          where: { userId: { in: ids } },
+        });
+        await tx.user.deleteMany({
+          where: { id: { in: ids }, isVerified: false },
+        });
+      }
+
+      return tx.user.create({
+        data: {
+          email,
+          username,
+          password: hashedPassword,
+          position: dto.puesto,
+          description: dto.description,
+          techStack: dto.techStacks ?? [],
+          socialLinks: dto.socialLinks as Prisma.InputJsonValue | undefined,
+        },
+      });
     });
 
     const token = await this.generateVerificationToken(user.id);
