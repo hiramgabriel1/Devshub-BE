@@ -6,7 +6,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Challenge, ChallengeMode, Prisma } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengesListQueryDto } from './dto/challenges-list-query.dto';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
@@ -18,6 +17,15 @@ const creatorSelect = {
   username: true,
   photoKey: true,
 } as const;
+
+function isPrismaUniqueViolation(e: unknown): boolean {
+  return (
+    typeof e === 'object' &&
+    e !== null &&
+    'code' in e &&
+    (e as { code?: string }).code === 'P2002'
+  );
+}
 
 @Injectable()
 export class ChallengesService {
@@ -162,7 +170,7 @@ export class ChallengesService {
         data: { challengeId, userId },
       });
     } catch (e: unknown) {
-      if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
+      if (isPrismaUniqueViolation(e)) {
         throw new ConflictException('Ya estás inscrito en este reto');
       }
       throw e;
@@ -234,7 +242,7 @@ export class ChallengesService {
         data: { teamId, userId },
       });
     } catch (e: unknown) {
-      if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
+      if (isPrismaUniqueViolation(e)) {
         throw new ConflictException('Ya perteneces a este equipo');
       }
       throw e;

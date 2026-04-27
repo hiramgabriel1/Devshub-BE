@@ -13,7 +13,10 @@
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "paths": {
+      "@prisma/client": ["./src/generated/prisma/client"]
+    }
   }
 }
 
