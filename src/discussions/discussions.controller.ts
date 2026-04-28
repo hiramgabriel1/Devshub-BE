@@ -95,14 +95,24 @@ export class DiscussionsController {
     return this.discussionsService.getLikesForDiscussion(discussionId, query);
   }
 
-  @ApiOperation({ summary: 'Comentarios de una discusión' })
+  @ApiOperation({
+    summary: 'Comentarios de una discusión',
+    description: 'Incluye `likesCount`; con Bearer opcional, `likedByViewer` por comentario.',
+  })
   @ApiNotFoundResponse({ description: 'Discusión no encontrada' })
+  @ApiBearerAuth()
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':discussionId/comments')
   getComments(
     @Param('discussionId') discussionId: string,
     @Query() query: PostCommentsQueryDto,
+    @Req() req: Request & { user?: AuthRequest['user'] },
   ) {
-    return this.discussionsService.getCommentsForDiscussion(discussionId, query);
+    return this.discussionsService.getCommentsForDiscussion(
+      discussionId,
+      query,
+      req.user?.userId,
+    );
   }
 
   @ApiOperation({ summary: 'Añadir comentario' })
@@ -145,6 +155,41 @@ export class DiscussionsController {
     @Param('commentId') commentId: string,
   ) {
     return this.discussionsService.deleteComment(req.user.userId, discussionId, commentId);
+  }
+
+  @ApiOperation({
+    summary: 'Like en un comentario de la discusión',
+    description: 'Propio u otros usuarios.',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpPost(':discussionId/comments/:commentId/like')
+  likeDiscussionComment(
+    @Req() req: AuthRequest,
+    @Param('discussionId') discussionId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.discussionsService.likeDiscussionComment(
+      req.user.userId,
+      discussionId,
+      commentId,
+    );
+  }
+
+  @ApiOperation({ summary: 'Quitar like del comentario' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Delete(':discussionId/comments/:commentId/like')
+  unlikeDiscussionComment(
+    @Req() req: AuthRequest,
+    @Param('discussionId') discussionId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.discussionsService.unlikeDiscussionComment(
+      req.user.userId,
+      discussionId,
+      commentId,
+    );
   }
 
   @ApiOperation({ summary: 'Like' })

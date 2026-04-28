@@ -30,10 +30,12 @@ model User {
   posts                Post[]
   draftPosts           DraftPost[]
   discussions        Discussion[]
-  comments             Comment[]
-  discussionComments DiscussionComment[]
-  likes                Like[]
-  discussionLikes    DiscussionLike[]
+  comments              Comment[]
+  discussionComments  DiscussionComment[]
+  commentLikes          CommentLike[]
+  discussionCommentLikes DiscussionCommentLike[]
+  likes                 Like[]
+  discussionLikes       DiscussionLike[]
   bookmarks            Bookmark[]
   reports              Report[]
   notificationsReceived  Notification[] @relation("NotificationRecipient")
@@ -217,10 +219,23 @@ model Comment {
 
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes  CommentLike[]
   notifications Notification[]
 
   @@index([postId])
   @@index([authorId])
+}
+
+model CommentLike {
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@index([commentId])
 }
 
 model Discussion {
@@ -264,10 +279,23 @@ model DiscussionComment {
 
   discussion Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
   author     User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes      DiscussionCommentLike[]
   notifications Notification[]
 
   @@index([discussionId])
   @@index([authorId])
+}
+
+model DiscussionCommentLike {
+  userId                String
+  discussionCommentId   String
+  createdAt             DateTime @default(now())
+
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  discussionComment DiscussionComment @relation(fields: [discussionCommentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, discussionCommentId])
+  @@index([discussionCommentId])
 }
 
 enum NotificationType {

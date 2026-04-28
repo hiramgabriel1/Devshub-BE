@@ -266,13 +266,20 @@ export class PostsController {
 
   @ApiOperation({
     summary: 'List comments on a post (published posts only)',
-    description: 'Default **5** items per request; use `offset` (and optional `limit`) for more pages.',
+    description:
+      'Default **5** items per request; use `offset` (and optional `limit`) for more pages. Cada comentario incluye `likesCount`; con Bearer opcional, `likedByViewer`.',
   })
   @ApiNotFoundResponse({ description: 'Post not found' })
+  @ApiBearerAuth()
   @ApiOkResponse({ description: 'Comments page (oldest first)' })
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':postId/comments')
-  getCommentsForPost(@Param('postId') postId: string, @Query() query: PostCommentsQueryDto) {
-    return this.postsService.getCommentsForPost(postId, query);
+  getCommentsForPost(
+    @Param('postId') postId: string,
+    @Query() query: PostCommentsQueryDto,
+    @Req() req: Request & { user?: AuthRequest['user'] },
+  ) {
+    return this.postsService.getCommentsForPost(postId, query, req.user?.userId);
   }
 
   @ApiOperation({ summary: 'Add a comment to a post' })
@@ -323,6 +330,46 @@ export class PostsController {
     @Param('commentId') commentId: string,
   ) {
     return this.postsService.deleteComment(req.user.userId, postId, commentId);
+  }
+
+  @ApiOperation({
+    summary: 'Dar like a un comentario del post',
+    description:
+      'Permite like propio u a terceros. Idempotente.',
+  })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Post borrador / comentario no encontrado' })
+  @ApiOkResponse({
+    description: '{ liked: true, likesCount }',
+    schema: { example: { liked: true, likesCount: 3 } },
+  })
+  @UseGuards(JwtAuthGuard)
+  @HttpPost(':postId/comments/:commentId/like')
+  likeComment(
+    @Req() req: AuthRequest,
+    @Param('postId') postId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.postsService.likePostComment(req.user.userId, postId, commentId);
+  }
+
+  @ApiOperation({ summary: 'Quitar tu like del comentario' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Post / comentario no encontrado' })
+  @ApiOkResponse({
+    description: '{ liked: false, likesCount }',
+    schema: { example: { liked: false, likesCount: 2 } },
+  })
+  @UseGuards(JwtAuthGuard)
+  @Delete(':postId/comments/:commentId/like')
+  unlikeComment(
+    @Req() req: AuthRequest,
+    @Param('postId') postId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.postsService.unlikePostComment(req.user.userId, postId, commentId);
   }
 
   @ApiOperation({ summary: 'Like a post' })

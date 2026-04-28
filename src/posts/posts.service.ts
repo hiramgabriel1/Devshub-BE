@@ -405,7 +405,7 @@ export class PostsService {
     return { bookmarked: false };
   }
 
-  async getCommentsForPost(postId: string, query: PostCommentsQueryDto) {
+  async getCommentsForPost(postId: string, query: PostCommentsQueryDto, viewerUserId?: string) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
       select: { id: true, isDraft: true },
@@ -429,10 +429,25 @@ export class PostsService {
           author: {
             select: { id: true, username: true, photoKey: true },
           },
+          _count: {
+            select: { likes: true },
+          },
         },
       }),
       this.prisma.comment.count({ where: { postId } }),
     ]);
+
+    let likedCommentIds = new Set<string>();
+    if (viewerUserId && rows.length > 0) {
+      const lkRows = await this.prisma.commentLike.findMany({
+        where: {
+          userId: viewerUserId,
+          commentId: { in: rows.map((r) => r.id) },
+        },
+        select: { commentId: true },
+      });
+      likedCommentIds = new Set(lkRows.map((r) => r.commentId));
+    }
 
     return {
       postId,
@@ -445,6 +460,8 @@ export class PostsService {
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         author: row.author,
+        likesCount: row._count.likes,
+        likedByViewer: viewerUserId ? likedCommentIds.has(row.id) : false,
       })),
     };
   }
@@ -477,10 +494,15 @@ export class PostsService {
         author: {
           select: { id: true, username: true, photoKey: true },
         },
+        _count: {
+          select: { likes: true },
+        },
       },
     });
     const commentsCount = await this.prisma.comment.count({ where: { postId } });
-    this.feedGateway.emitCommentCreated({ postId, comment, commentsCount });
+    const { _count, ...commentRest } = comment;
+    const out = { ...commentRest, likesCount: _count.likes };
+    this.feedGateway.emitCommentCreated({ postId, comment: out, commentsCount });
     void this.notifyPostCommentAndMentions({
       post,
       postId,
@@ -488,7 +510,7 @@ export class PostsService {
       body,
       comment,
     });
-    return comment;
+    return out;
   }
 
   private async notifyPostCommentAndMentions(args: {
@@ -558,10 +580,15 @@ export class PostsService {
         author: {
           select: { id: true, username: true, photoKey: true },
         },
+        _count: {
+          select: { likes: true },
+        },
       },
     });
-    this.feedGateway.emitCommentUpdated({ postId, comment });
-    return comment;
+    const { _count: count, ...rest } = comment;
+    const out = { ...rest, likesCount: count.likes };
+    this.feedGateway.emitCommentUpdated({ postId, comment: out });
+    return out;
   }
 
   async deleteComment(userId: string, postId: string, commentId: string) {
@@ -570,6 +597,54 @@ export class PostsService {
     const commentsCount = await this.prisma.comment.count({ where: { postId } });
     this.feedGateway.emitCommentDeleted({ postId, commentId, commentsCount });
     return { deleted: true, id: commentId, postId };
+  }
+
+  async likePostComment(userId: string, postId: string, commentId: string) {
+    const row = await this.prisma.comment.findFirst({
+      where: { id: commentId, postId },
+      select: {
+        id: true,
+        post: { select: { isDraft: true } },
+      },
+    });
+    if (!row || row.post.isDraft) {
+      AppError.notFound(ErrorCode.POST_COMMENT_NOT_FOUND, 'Comment not found');
+    }
+
+    await this.prisma.commentLike.upsert({
+      where: {
+        userId_commentId: {
+          userId,
+          commentId,
+        },
+      },
+      update: {},
+      create: { userId, commentId },
+    });
+    const likesCount = await this.prisma.commentLike.count({ where: { commentId } });
+    return { liked: true, likesCount };
+  }
+
+  async unlikePostComment(userId: string, postId: string, commentId: string) {
+    const row = await this.prisma.comment.findFirst({
+      where: { id: commentId, postId },
+      select: {
+        id: true,
+        post: { select: { isDraft: true } },
+      },
+    });
+    if (!row || row.post.isDraft) {
+      AppError.notFound(ErrorCode.POST_COMMENT_NOT_FOUND, 'Comment not found');
+    }
+
+    await this.prisma.commentLike.deleteMany({
+      where: {
+        userId,
+        commentId,
+      },
+    });
+    const likesCount = await this.prisma.commentLike.count({ where: { commentId } });
+    return { liked: false, likesCount };
   }
 
   async getLikesForPost(postId: string, query: PostLikesQueryDto) {

@@ -214,7 +214,7 @@ export class DiscussionsService {
     };
   }
 
-  async getCommentsForDiscussion(discussionId: string, query: PostCommentsQueryDto) {
+  async getCommentsForDiscussion(discussionId: string, query: PostCommentsQueryDto, viewerUserId?: string) {
     const d = await this.prisma.discussion.findUnique({
       where: { id: discussionId },
       select: { id: true, isDraft: true },
@@ -236,10 +236,23 @@ export class DiscussionsService {
           createdAt: true,
           updatedAt: true,
           author: { select: { id: true, username: true, photoKey: true } },
+          _count: { select: { likes: true } },
         },
       }),
       this.prisma.discussionComment.count({ where: { discussionId } }),
     ]);
+
+    let likedIds = new Set<string>();
+    if (viewerUserId && rows.length > 0) {
+      const batch = await this.prisma.discussionCommentLike.findMany({
+        where: {
+          userId: viewerUserId,
+          discussionCommentId: { in: rows.map((r) => r.id) },
+        },
+        select: { discussionCommentId: true },
+      });
+      likedIds = new Set(batch.map((b) => b.discussionCommentId));
+    }
 
     return {
       discussionId,
@@ -252,6 +265,8 @@ export class DiscussionsService {
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         author: row.author,
+        likesCount: row._count.likes,
+        likedByViewer: viewerUserId ? likedIds.has(row.id) : false,
       })),
     };
   }
@@ -276,10 +291,13 @@ export class DiscussionsService {
         createdAt: true,
         updatedAt: true,
         author: { select: { id: true, username: true, photoKey: true } },
+        _count: { select: { likes: true } },
       },
     });
     const commentsCount = await this.prisma.discussionComment.count({ where: { discussionId } });
-    this.feedGateway.emitDiscussionCommentCreated({ discussionId, comment, commentsCount });
+    const { _count, ...rest } = comment;
+    const out = { ...rest, likesCount: _count.likes };
+    this.feedGateway.emitDiscussionCommentCreated({ discussionId, comment: out, commentsCount });
     try {
       await this.notifications.onCommentOnDiscussion({
         discussionAuthorId: d.authorId,
@@ -300,7 +318,7 @@ export class DiscussionsService {
     } catch {
       /* vacío */
     }
-    return comment;
+    return out;
   }
 
   private async getDiscussionCommentForOwnerOrThrow(
@@ -344,10 +362,13 @@ export class DiscussionsService {
         createdAt: true,
         updatedAt: true,
         author: { select: { id: true, username: true, photoKey: true } },
+        _count: { select: { likes: true } },
       },
     });
-    this.feedGateway.emitDiscussionCommentUpdated({ discussionId, comment });
-    return comment;
+    const { _count: c, ...rest } = comment;
+    const outComment = { ...rest, likesCount: c.likes };
+    this.feedGateway.emitDiscussionCommentUpdated({ discussionId, comment: outComment });
+    return outComment;
   }
 
   async deleteComment(userId: string, discussionId: string, commentId: string) {
@@ -356,6 +377,58 @@ export class DiscussionsService {
     const commentsCount = await this.prisma.discussionComment.count({ where: { discussionId } });
     this.feedGateway.emitDiscussionCommentDeleted({ discussionId, commentId, commentsCount });
     return { deleted: true, id: commentId, discussionId };
+  }
+
+  async likeDiscussionComment(userId: string, discussionId: string, commentId: string) {
+    const row = await this.prisma.discussionComment.findFirst({
+      where: { id: commentId, discussionId },
+      select: {
+        id: true,
+        discussion: { select: { isDraft: true } },
+      },
+    });
+    if (!row || row.discussion.isDraft) {
+      AppError.notFound(ErrorCode.DISCUSSION_COMMENT_NOT_FOUND, 'Comment not found');
+    }
+
+    await this.prisma.discussionCommentLike.upsert({
+      where: {
+        userId_discussionCommentId: {
+          userId,
+          discussionCommentId: commentId,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        discussionCommentId: commentId,
+      },
+    });
+    const likesCount = await this.prisma.discussionCommentLike.count({
+      where: { discussionCommentId: commentId },
+    });
+    return { liked: true, likesCount };
+  }
+
+  async unlikeDiscussionComment(userId: string, discussionId: string, commentId: string) {
+    const row = await this.prisma.discussionComment.findFirst({
+      where: { id: commentId, discussionId },
+      select: {
+        id: true,
+        discussion: { select: { isDraft: true } },
+      },
+    });
+    if (!row || row.discussion.isDraft) {
+      AppError.notFound(ErrorCode.DISCUSSION_COMMENT_NOT_FOUND, 'Comment not found');
+    }
+
+    await this.prisma.discussionCommentLike.deleteMany({
+      where: { userId, discussionCommentId: commentId },
+    });
+    const likesCount = await this.prisma.discussionCommentLike.count({
+      where: { discussionCommentId: commentId },
+    });
+    return { liked: false, likesCount };
   }
 
   async likeDiscussion(userId: string, discussionId: string) {
