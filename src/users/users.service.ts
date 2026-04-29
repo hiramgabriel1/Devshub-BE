@@ -196,6 +196,17 @@ export class UsersService {
    });
  }
 
+  /**
+   * this function returns the following of the user
+   * @param userId the id of the user
+   * @returns 
+   */
+  async getMyFollowing(userId: string) {
+    return await this.prisma.user.findMany({
+      where: { followers: { some: { followerId: userId } } },
+      select: { id: true, username: true, photoKey: true, isAdmin: true },
+    });
+  }
 
   async getProfileByUsername(username: string) {
     const user = await this.prisma.user.findUnique({

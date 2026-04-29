@@ -214,6 +214,16 @@ export class UsersController {
     return this.usersService.getMyFollowers(req.user.userId);
   }
 
+  @ApiOperation({ summary: 'Get my following (private)' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiOkResponse({ description: 'Following retrieved successfully' })
+  @UseGuards(JwtAuthGuard)
+  @Get('my-following')
+  getMyFollowing(@Req() req: AuthRequest) {
+    return this.usersService.getMyFollowing(req.user.userId);
+  }
+
   @ApiOperation({ summary: 'Get a public profile by username' })
   @ApiOkResponse({ description: 'Profile retrieved successfully' })
   @ApiNotFoundResponse({ description: 'User not found' })
