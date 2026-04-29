@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { AppError, ErrorCode } from '../common/errors';
 import { Prisma } from '../generated/prisma/client';
 import { randomBytes } from 'crypto';
-import type { Express } from 'express';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
@@ -88,7 +87,7 @@ export class UsersService {
         post: {
           include: {
             author: {
-              select: { id: true, username: true, photoKey: true },
+              select: { id: true, username: true, photoKey: true, isAdmin: true },
             },
             _count: {
               select: { likes: true, bookmarks: true },
@@ -197,6 +196,7 @@ export class UsersService {
         techStack: true,
         socialLinks: true,
         websiteUrl: true,
+        isAdmin: true,
         createdAt: true,
         _count: {
           select: {

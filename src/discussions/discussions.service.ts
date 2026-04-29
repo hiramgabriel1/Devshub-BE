@@ -236,7 +236,7 @@ export class DiscussionsService {
           body: true,
           createdAt: true,
           updatedAt: true,
-          author: { select: { id: true, username: true, photoKey: true } },
+          author: { select: { id: true, username: true, photoKey: true, isAdmin: true } },
           _count: { select: { likes: true, replies: true } },
         },
       }),

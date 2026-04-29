@@ -131,6 +131,7 @@ export class PostsService {
         id: true,
         username: true,
         photoKey: true,
+        isAdmin: true,
       } as const,
     },
     _count: {
@@ -343,6 +344,7 @@ export class PostsService {
                   id: true,
                   username: true,
                   photoKey: true,
+                  isAdmin: true,
                 },
               },
               _count: {
@@ -428,7 +430,7 @@ export class PostsService {
           createdAt: true,
           updatedAt: true,
           author: {
-            select: { id: true, username: true, photoKey: true },
+            select: { id: true, username: true, photoKey: true, isAdmin: true },
           },
           _count: {
             select: { likes: true, replies: true },
@@ -513,7 +515,7 @@ export class PostsService {
         createdAt: true,
         updatedAt: true,
         author: {
-          select: { id: true, username: true, photoKey: true },
+          select: { id: true, username: true, photoKey: true, isAdmin: true },
         },
         _count: {
           select: { likes: true, replies: true },
@@ -620,7 +622,7 @@ export class PostsService {
         createdAt: true,
         updatedAt: true,
         author: {
-          select: { id: true, username: true, photoKey: true },
+          select: { id: true, username: true, photoKey: true, isAdmin: true },
         },
         _count: {
           select: { likes: true, replies: true },
@@ -736,7 +738,7 @@ export class PostsService {
         select: {
           createdAt: true,
           user: {
-            select: { id: true, username: true, photoKey: true },
+            select: { id: true, username: true, photoKey: true, isAdmin: true },
           },
         },
       }),
@@ -829,6 +831,7 @@ export class PostsService {
             id: true,
             username: true,
             photoKey: true,
+            isAdmin: true,
           },
         },
         _count: {
@@ -899,6 +902,7 @@ export class PostsService {
             id: true,
             username: true,
             photoKey: true,
+            isAdmin: true,
           },
         },
         _count: {
