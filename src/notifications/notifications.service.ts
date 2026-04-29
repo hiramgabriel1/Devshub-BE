@@ -11,7 +11,7 @@ const previewText = (s: string, max = 200) => {
 };
 
 const listInclude = {
-  actor: { select: { id: true, username: true, photoKey: true } as const },
+  actor: { select: { id: true, username: true, photoKey: true, isAdmin: true } as const },
   post: { select: { id: true, title: true, isDraft: true } as const },
   comment: { select: { id: true, postId: true, body: true } as const },
   discussion: { select: { id: true, title: true, isDraft: true } as const },
